@@ -1,0 +1,47 @@
+--- app.py	2026-11-10 15:33:26.228572947 +0000
++++ app_fixed.py	2026-11-10 15:34:02.240575088 +0000
+@@ -11,6 +11,7 @@
+ 
+ import sqlite3
+ from flask import Flask, request, redirect, make_response
++from html import escape  # для защиты от XSS
+ 
+ app = Flask(__name__)
+ DB = "app.db"
+@@ -38,12 +39,12 @@
+     rows = conn.execute("SELECT text FROM messages").fetchall()
+     conn.close()
+ 
+-    # ===== УЯЗВИМОСТЬ 2: XSS =====
+-    # Текст сообщений вставляется в HTML как есть, без экранирования.
+-    # Если кто-то отправит <script>...</script>, он выполнится у всех.
++    # ИСПРАВЛЕНО (XSS): экранируем текст перед вставкой в HTML.
++    # escape() превращает <script> в безопасный &lt;script&gt;,
++    # и браузер показывает его как текст, а не выполняет.
+     messages_html = ""
+     for r in rows:
+-        messages_html += "<p>" + r[0] + "</p>"
++        messages_html += "<p>" + escape(r[0]) + "</p>"
+ 
+     return """
+     <h1>Гостевая книга</h1>
+@@ -69,14 +70,13 @@
+     username = request.form.get("username", "")
+     password = request.form.get("password", "")
+ 
+-    # ===== УЯЗВИМОСТЬ 1: SQL-инъекция =====
+-    # Логин и пароль напрямую склеиваются в SQL-запрос.
+-    # Можно подставить ' OR '1'='1 и войти без пароля.
+-    query = "SELECT * FROM users WHERE username='" + username + \
+-            "' AND password='" + password + "'"
++    # ИСПРАВЛЕНО (SQL-инъекция): используем параметры (знаки ?).
++    # Теперь логин и пароль передаются отдельно от текста запроса,
++    # и их нельзя "подмешать" в сам SQL.
++    query = "SELECT * FROM users WHERE username=? AND password=?"
+ 
+     conn = sqlite3.connect(DB)
+-    user = conn.execute(query).fetchone()
++    user = conn.execute(query, (username, password)).fetchone()
+     conn.close()
+ 
+     if user:
